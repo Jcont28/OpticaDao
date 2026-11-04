@@ -1,16 +1,50 @@
 package hn.optica.controller;
-import hn.optica.config.DB;
+
+import com.google.gson.JsonObject;
+import hn.optica.model.Cliente;
+import hn.optica.service.ApartadoService;
+import hn.optica.service.UsuarioService;
 import jakarta.servlet.annotation.WebServlet;
-import jakarta.servlet.http.*;import java.sql.Connection;
-import java.util.*;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
+import java.io.IOException;
+
 @WebServlet("/api/apartados")
-public class ApartadoServlet extends JsonServlet{
- protected void doPost(HttpServletRequest q,HttpServletResponse p)
-         throws java.io.IOException{if(!cliente(q)){p.sendError(403);
-         return;}
-         try{int uid=(int)q.getSession().getAttribute("usuarioId"),aro=num(body(q),"aroId");
-         try(Connection c=DB.get();var s=c.prepareStatement("INSERT Apartados(ClienteID,AroID) SELECT ClienteID,? FROM Clientes WHERE UsuarioID=?"))
-         {s.setInt(1,aro);s.setInt(2,uid);s.executeUpdate();}
-         json(p,Map.of("mensaje","Aro apartado correctamente"));}
-         catch(Exception e){p.setStatus(400);json(p,Map.of("mensaje",e.getMessage()));}}
+public class ApartadoServlet extends JsonServlet {
+
+    private ApartadoService apartadoService = new ApartadoService();
+    private UsuarioService usuarioService = new UsuarioService();
+
+    @Override
+    protected void doGet(HttpServletRequest req, HttpServletResponse resp) throws IOException {
+        if (usuarioSesion(req) == null) {
+            enviarMensaje(resp, 401, "Debe iniciar sesion");
+            return;
+        }
+        try {
+            if (esCliente(req)) {
+                Cliente cliente = usuarioService.buscarClientePorUsuario(usuarioSesion(req).getId());
+                enviarJson(resp, 200, apartadoService.listarPorCliente(cliente.getId()));
+            } else {
+                enviarJson(resp, 200, apartadoService.listarPendientes());
+            }
+        } catch (Exception e) {
+            enviarError(resp, e);
+        }
+    }
+
+    @Override
+    protected void doPost(HttpServletRequest req, HttpServletResponse resp) throws IOException {
+        if (!permitirCliente(req, resp)) {
+            return;
+        }
+        try {
+            JsonObject datos = leerJson(req);
+            Cliente cliente = usuarioService.buscarClientePorUsuario(usuarioSesion(req).getId());
+            apartadoService.apartar(cliente.getId(), entero(datos, "aroId"));
+            enviarMensaje(resp, 200, "Aro apartado correctamente");
+        } catch (Exception e) {
+            enviarError(resp, e);
+        }
+    }
 }

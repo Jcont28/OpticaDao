@@ -1,67 +1,84 @@
 package hn.optica.controller;
 
-import hn.optica.service.OpticaService;
-import hn.optica.model.Usuario; 
-import jakarta.servlet.annotation.WebServlet;
-import jakarta.servlet.http.*;
 import com.google.gson.JsonObject;
-import org.mindrot.jbcrypt.BCrypt; 
-import java.sql.*; 
-import hn.optica.config.DB;
+import hn.optica.model.Usuario;
+import hn.optica.service.UsuarioService;
+import jakarta.servlet.annotation.WebServlet;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
+import jakarta.servlet.http.HttpSession;
+import java.io.IOException;
+import java.util.HashMap;
+import java.util.Map;
 
-@WebServlet(urlPatterns={"/api/login","/api/logout","/api/registro"})
+@WebServlet(urlPatterns = {"/api/login", "/api/logout", "/api/registro", "/api/sesion"})
 public class AuthServlet extends JsonServlet {
-    private final OpticaService s = new OpticaService();
+
+    private UsuarioService usuarioService = new UsuarioService();
 
     @Override
-    protected void doPost(HttpServletRequest req, HttpServletResponse res) throws java.io.IOException {
+    protected void doGet(HttpServletRequest req, HttpServletResponse resp) throws IOException {
+        Usuario u = usuarioSesion(req);
+        if (u == null) {
+            enviarMensaje(resp, 401, "Debe iniciar sesion");
+            return;
+        }
+        enviarJson(resp, 200, datosUsuario(u));
+    }
+
+    @Override
+    protected void doPost(HttpServletRequest req, HttpServletResponse resp) throws IOException {
+        String ruta = req.getServletPath();
         try {
-            String path = req.getServletPath();
-            JsonObject b = body(req);
-
-            if (path.endsWith("login")) {
-                Usuario u = s.usuarios.autenticar(str(b, "usuario"), str(b, "password"));
-                if (u == null) {
-                    res.setStatus(401);
-                    json(res, java.util.Map.of("mensaje", "Usuario o contraseña incorrectos"));
-                    return;
+            if (ruta.equals("/api/login")) {
+                login(req, resp);
+            } else if (ruta.equals("/api/registro")) {
+                registro(req, resp);
+            } else {
+                HttpSession sesion = req.getSession(false);
+                if (sesion != null) {
+                    sesion.invalidate();
                 }
-
-                HttpSession session = req.getSession(true);
-                session.setAttribute("UsuarioID", u.id);
-                session.setAttribute("Nombre_Usuario", u.Nombre_Usuario);
-                session.setAttribute("usuario", u.usuario);
-
-                // Determinar la vista según el rol/tipo del usuario
-                String destino = "CLIENTE".equalsIgnoreCase(u.rol) ? "catalogo.html" : "productos.html";
-
-                json(res, java.util.Map.of(
-                    "Nombre_Usuario", u.Nombre_Usuario,
-                    "destino", destino
-                ));
-            } 
-            else if (path.endsWith("registro")) {
-                String pass = str(b, "password");
-                if (pass == null || pass.length() < 8) {
-                    throw new IllegalArgumentException("La contraseña debe tener al menos 8 caracteres.");
-                }
-                s.usuarios.crearCliente(
-                    str(b, "nombre"),
-                    str(b, "dni"),
-                    str(b, "telefono"),
-                    str(b, "correo"),
-                    BCrypt.hashpw(pass, BCrypt.gensalt())
-                );
-                json(res, java.util.Map.of("mensaje", "Cuenta creada. Ya puedes iniciar sesión."));
-            } 
-            else {
-                req.getSession().invalidate();
-                json(res, java.util.Map.of("mensaje", "Sesión cerrada"));
+                enviarMensaje(resp, 200, "Sesion cerrada");
             }
         } catch (Exception e) {
-            res.setStatus(400);
-            json(res, java.util.Map.of("mensaje", e.getMessage() == null ? "Error" : e.getMessage()));
+            enviarError(resp, e);
         }
     }
-}
 
+    private void login(HttpServletRequest req, HttpServletResponse resp) throws Exception {
+        JsonObject datos = leerJson(req);
+        Usuario u = usuarioService.login(texto(datos, "usuario"), texto(datos, "password"));
+        HttpSession anterior = req.getSession(false);
+        if (anterior != null) {
+            anterior.invalidate();
+        }
+        HttpSession sesion = req.getSession(true);
+        sesion.setAttribute("usuario", u);
+        enviarJson(resp, 200, datosUsuario(u));
+    }
+
+    private void registro(HttpServletRequest req, HttpServletResponse resp) throws Exception {
+        JsonObject datos = leerJson(req);
+        usuarioService.registrarCliente(
+                texto(datos, "nombre"),
+                texto(datos, "dni"),
+                texto(datos, "telefono"),
+                texto(datos, "correo"),
+                texto(datos, "password"));
+        enviarMensaje(resp, 200, "Cuenta creada. Ya puedes iniciar sesion.");
+    }
+
+    private Map<String, Object> datosUsuario(Usuario u) {
+        Map<String, Object> datos = new HashMap<>();
+        datos.put("usuario", u.getUsuario());
+        datos.put("nombre", u.getNombre());
+        datos.put("rol", u.getRol());
+        if (UsuarioService.ROL_CLIENTE.equals(u.getRol())) {
+            datos.put("destino", "catalogo.html");
+        } else {
+            datos.put("destino", "productos.html");
+        }
+        return datos;
+    }
+}

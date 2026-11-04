@@ -1,4 +1,121 @@
-<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Catálogo de aros</title><link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/css/bootstrap.min.css" rel="stylesheet"></head><body><nav class="navbar navbar-dark bg-dark"><div class="container"><span class="navbar-brand">Óptica | Catálogo</span><a class="nav-link text-white" href="historial.html">Mis mediciones</a></div></nav><main class="container py-4"><h2>Catálogo de aros</h2><div class="row g-2 mb-3"><div class="col"><input id="marca" class="form-control" placeholder="Filtrar por marca"></div><div class="col"><input id="material" class="form-control" placeholder="Material"></div><div class="col"><input id="forma" class="form-control" placeholder="Forma"></div><div class="col"><button class="btn btn-primary" onclick="cargar()">Filtrar</button></div></div><div id="cards" class="row g-3"></div></main><script>
-async function cargar(){let q=new URLSearchParams({tipo:'ARO',marca:marca.value,material:material.value,forma:forma.value});let r=await fetch('api/productos?'+q);let a=await r.json();cards.innerHTML='';a.forEach(x=>cards.insertAdjacentHTML('beforeend',`<div class="col-md-4"><div class="card h-100"><div class="card-body"><h5>${x.nombre}</h5><p>${x.marca||''} · ${x.material||''} · ${x.forma||''}</p><p>Precio: L. ${x.precio} | Disponibles: ${x.stock}</p><button class="btn btn-outline-primary" onclick="apartar(${x.id})">Apartar aro</button></div></div></div>`));}
-async function apartar(id){let r=await fetch('api/apartados',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({aroId:id})});let d=await r.json();alert(d.mensaje);}cargar();
-</script></body></html>
+<!doctype html>
+<html lang="es">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Catálogo de aros</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/css/bootstrap.min.css" rel="stylesheet">
+</head>
+<body>
+    <nav class="navbar navbar-expand navbar-dark bg-dark">
+        <div class="container">
+            <span class="navbar-brand">Óptica | Cliente</span>
+            <div class="navbar-nav">
+                <a class="nav-link active" href="catalogo.html">Catálogo</a>
+                <a class="nav-link" href="historial.html">Mis mediciones</a>
+            </div>
+            <div class="text-white">
+                <span id="nombreUsuario"></span>
+                <button class="btn btn-sm btn-outline-light ms-2" onclick="salir()">Salir</button>
+            </div>
+        </div>
+    </nav>
+    <main class="container py-4">
+        <h2>Catálogo de aros</h2>
+        <div class="row g-2 mb-3">
+            <div class="col-md"><input id="marca" class="form-control" placeholder="Marca"></div>
+            <div class="col-md"><input id="material" class="form-control" placeholder="Material"></div>
+            <div class="col-md"><input id="forma" class="form-control" placeholder="Forma"></div>
+            <div class="col-md"><input id="precioMin" class="form-control" type="number" min="0" placeholder="Precio mínimo"></div>
+            <div class="col-md"><input id="precioMax" class="form-control" type="number" min="0" placeholder="Precio máximo"></div>
+            <div class="col-md-auto">
+                <button class="btn btn-primary" onclick="cargarCatalogo()">Filtrar</button>
+                <button class="btn btn-secondary" onclick="limpiarFiltros()">Limpiar</button>
+            </div>
+        </div>
+        <div id="mensaje" class="d-none"></div>
+        <div id="tarjetas" class="row g-3"></div>
+
+        <h3 class="mt-5">Mis aros apartados</h3>
+        <table class="table table-striped">
+            <thead>
+                <tr><th>Fecha</th><th>Aro</th><th>Marca</th><th>Precio</th><th>Estado</th></tr>
+            </thead>
+            <tbody id="apartados"></tbody>
+        </table>
+    </main>
+    <script src="js/app.js"></script>
+    <script>
+        async function cargarCatalogo() {
+            const filtros = new URLSearchParams({
+                marca: document.getElementById('marca').value,
+                material: document.getElementById('material').value,
+                forma: document.getElementById('forma').value,
+                precioMin: document.getElementById('precioMin').value,
+                precioMax: document.getElementById('precioMax').value
+            });
+            try {
+                const aros = await pedir('api/catalogo?' + filtros.toString());
+                let html = '';
+                for (const aro of aros) {
+                    html += '<div class="col-md-4"><div class="card h-100"><div class="card-body">'
+                        + '<h5>' + escapar(aro.nombre) + '</h5>'
+                        + '<p class="mb-1">Marca: ' + escapar(aro.marca) + '</p>'
+                        + '<p class="mb-1">Material: ' + escapar(aro.material) + '</p>'
+                        + '<p class="mb-1">Forma: ' + escapar(aro.forma) + '</p>'
+                        + '<p class="fw-bold">' + dinero(aro.precio) + ' | Disponibles: ' + aro.stock + '</p>'
+                        + '<button class="btn btn-outline-primary" onclick="apartar(' + aro.id + ')">Apartar aro</button>'
+                        + '</div></div></div>';
+                }
+                if (aros.length === 0) {
+                    html = '<p>No hay aros con esos filtros.</p>';
+                }
+                document.getElementById('tarjetas').innerHTML = html;
+            } catch (error) {
+                mostrarMensaje('mensaje', error.message, 'danger');
+            }
+        }
+
+        function limpiarFiltros() {
+            for (const id of ['marca', 'material', 'forma', 'precioMin', 'precioMax']) {
+                document.getElementById(id).value = '';
+            }
+            cargarCatalogo();
+        }
+
+        async function apartar(aroId) {
+            try {
+                const datos = await pedir('api/apartados', 'POST', { aroId: aroId });
+                mostrarMensaje('mensaje', datos.mensaje, 'success');
+                cargarApartados();
+            } catch (error) {
+                mostrarMensaje('mensaje', error.message, 'danger');
+            }
+        }
+
+        async function cargarApartados() {
+            try {
+                const lista = await pedir('api/apartados');
+                let html = '';
+                for (const a of lista) {
+                    html += '<tr><td>' + a.fecha + '</td><td>' + escapar(a.aroNombre) + '</td><td>' + escapar(a.marca)
+                        + '</td><td>' + dinero(a.precio) + '</td><td>' + a.estado + '</td></tr>';
+                }
+                if (lista.length === 0) {
+                    html = '<tr><td colspan="5">Aún no has apartado aros.</td></tr>';
+                }
+                document.getElementById('apartados').innerHTML = html;
+            } catch (error) {
+                mostrarMensaje('mensaje', error.message, 'danger');
+            }
+        }
+
+        verificarSesion('CLIENTE').then(function (sesion) {
+            if (sesion) {
+                cargarCatalogo();
+                cargarApartados();
+            }
+        });
+    </script>
+</body>
+</html>

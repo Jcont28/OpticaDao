@@ -1,0 +1,11 @@
+{
+  "framework": null,
+  "installCommand": "echo sin dependencias",
+  "buildCommand": "echo sin compilacion",
+  "outputDirectory": "src/main/webapp",
+  "cleanUrls": false,
+  "rewrites": [
+    { "source": "/", "destination": "/login.html" },
+    { "source": "/api/:ruta*", "destination": "https://opticadao.onrender.com/api/:ruta*" }
+  ]
+}

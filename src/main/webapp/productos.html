@@ -1,8 +1,172 @@
-<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Inventario</title><link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/css/bootstrap.min.css" rel="stylesheet"></head><body><nav class="navbar navbar-dark bg-dark"><div class="container"><span class="navbar-brand">Óptica | Inventario</span><a class="nav-link text-white" href="ventas.html">Ventas</a><a class="nav-link text-white" href="historial.html">Mediciones</a></div></nav><main class="container py-4"><h2>Gestión de inventario</h2><div class="alert alert-warning" id="alertas">Cargando alertas…</div><form id="form" class="card card-body mb-4"><input type="hidden" id="id"><div class="row g-2"><div class="col-md-3"><input id="nombre" class="form-control" placeholder="Nombre" required></div><div class="col-md-2"><select id="tipo" class="form-select"><option>ARO</option><option>LUNA</option><option>ACCESORIO</option></select></div><div class="col-md-2"><input id="marca" class="form-control" placeholder="Marca"></div><div class="col-md-2"><input id="material" class="form-control" placeholder="Material"></div><div class="col-md-2"><input id="forma" class="form-control" placeholder="Forma"></div><div class="col-md-2"><input id="precio" class="form-control" type="number" min="0" step=".01" placeholder="Precio" required></div><div class="col-md-2"><input id="stock" class="form-control" type="number" min="0" placeholder="Stock" required></div><div class="col-md-2"><button class="btn btn-primary w-100">Guardar</button></div></div></form><table class="table table-striped"><thead><tr><th>Producto</th><th>Tipo</th><th>Marca</th><th>Material</th><th>Forma</th><th>Precio</th><th>Stock</th><th>Acciones</th></tr></thead><tbody id="rows"></tbody></table></main>
-<script>
-const $=id=>document.getElementById(id);let data=[];
-async function cargar(){let r=await fetch('api/productos');data=await r.json();$('rows').innerHTML='';let low=data.filter(x=>x.tipo==='ARO'&&x.stock<5);$('alertas').textContent=low.length?'Stock bajo: '+low.map(x=>x.nombre+' ('+x.stock+')').join(', '):'No hay alertas de stock bajo.';data.forEach(x=>{$('rows').insertAdjacentHTML('beforeend',`<tr><td>${x.nombre}</td><td>${x.tipo}</td><td>${x.marca||''}</td><td>${x.material||''}</td><td>${x.forma||''}</td><td>${x.precio}</td><td>${x.stock}</td><td><button class="btn btn-sm btn-warning" onclick="editar(${x.id})">Editar</button> <button class="btn btn-sm btn-danger" onclick="borrar(${x.id})">Desactivar</button></td></tr>`)});}
-function editar(id){let x=data.find(p=>p.id===id);['id','nombre','tipo','marca','material','forma','precio','stock'].forEach(k=>$(k).value=x[k]??'');}
-$('form').onsubmit=async e=>{e.preventDefault();let x={nombre:$('nombre').value,tipo:$('tipo').value,marca:$('marca').value,material:$('material').value,forma:$('forma').value,precio:$('precio').value,stock:+$('stock').value};let edit=!!$('id').value;if(edit)x.id=+$('id').value;let r=await fetch('api/productos',{method:edit?'PUT':'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(x)});let d=await r.json();alert(d.mensaje);if(r.ok){$('form').reset();$('id').value='';cargar();}};
-async function borrar(id){if(confirm('¿Desactivar producto?')){let r=await fetch('api/productos?id='+id,{method:'DELETE'});alert((await r.json()).mensaje);cargar();}}cargar();
-</script></body></html>
+<!doctype html>
+<html lang="es">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Inventario</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/css/bootstrap.min.css" rel="stylesheet">
+</head>
+<body>
+    <nav class="navbar navbar-expand navbar-dark bg-dark">
+        <div class="container">
+            <span class="navbar-brand">Óptica | Vendedor</span>
+            <div class="navbar-nav">
+                <a class="nav-link active" href="productos.html">Inventario</a>
+                <a class="nav-link" href="mediciones.html">Mediciones</a>
+                <a class="nav-link" href="ventas.html">Ventas</a>
+            </div>
+            <div class="text-white">
+                <span id="nombreUsuario"></span>
+                <button class="btn btn-sm btn-outline-light ms-2" onclick="salir()">Salir</button>
+            </div>
+        </div>
+    </nav>
+    <main class="container py-4">
+        <h2>Gestión de inventario</h2>
+        <div id="alertas" class="alert alert-secondary">Cargando alertas...</div>
+        <div id="mensaje" class="d-none"></div>
+
+        <form id="formProducto" class="card card-body mb-4">
+            <h5 id="tituloFormulario">Nuevo producto</h5>
+            <input type="hidden" id="id">
+            <div class="row g-2">
+                <div class="col-md-3"><input id="nombre" class="form-control" placeholder="Nombre" required></div>
+                <div class="col-md-2">
+                    <select id="tipo" class="form-select">
+                        <option value="ARO">ARO</option>
+                        <option value="LUNA">LUNA</option>
+                        <option value="ACCESORIO">ACCESORIO</option>
+                    </select>
+                </div>
+                <div class="col-md-2"><input id="marca" class="form-control" placeholder="Marca"></div>
+                <div class="col-md-2"><input id="material" class="form-control" placeholder="Material"></div>
+                <div class="col-md-3"><input id="forma" class="form-control" placeholder="Forma"></div>
+                <div class="col-md-2"><input id="precio" class="form-control" type="number" min="0" step="0.01" placeholder="Precio" required></div>
+                <div class="col-md-2"><input id="stock" class="form-control" type="number" min="0" placeholder="Stock" required></div>
+                <div class="col-md-2"><button class="btn btn-primary w-100">Guardar</button></div>
+                <div class="col-md-2"><button type="button" class="btn btn-secondary w-100" onclick="limpiar()">Cancelar</button></div>
+            </div>
+        </form>
+
+        <div class="mb-2" style="max-width: 250px">
+            <select id="filtroTipo" class="form-select" onchange="cargarProductos()">
+                <option value="">Todos los tipos</option>
+                <option value="ARO">Aros</option>
+                <option value="LUNA">Lunas</option>
+                <option value="ACCESORIO">Accesorios</option>
+            </select>
+        </div>
+        <table class="table table-striped">
+            <thead>
+                <tr><th>Producto</th><th>Tipo</th><th>Marca</th><th>Material</th><th>Forma</th><th>Precio</th><th>Stock</th><th>Acciones</th></tr>
+            </thead>
+            <tbody id="filas"></tbody>
+        </table>
+    </main>
+    <script src="js/app.js"></script>
+    <script>
+        let productos = [];
+        const campos = ['id', 'nombre', 'tipo', 'marca', 'material', 'forma', 'precio', 'stock'];
+
+        async function cargarAlertas() {
+            try {
+                const lista = await pedir('api/alertas');
+                const caja = document.getElementById('alertas');
+                if (lista.length === 0) {
+                    caja.className = 'alert alert-success';
+                    caja.textContent = 'No hay aros con stock bajo.';
+                } else {
+                    let texto = 'Stock bajo (menos de 5 unidades): ';
+                    const nombres = [];
+                    for (const p of lista) {
+                        nombres.push(p.nombre + ' (' + p.stock + ')');
+                    }
+                    caja.className = 'alert alert-warning';
+                    caja.textContent = texto + nombres.join(', ');
+                }
+            } catch (error) {
+                mostrarMensaje('alertas', error.message, 'danger');
+            }
+        }
+
+        async function cargarProductos() {
+            try {
+                const tipo = document.getElementById('filtroTipo').value;
+                productos = await pedir('api/productos?tipo=' + tipo);
+                let html = '';
+                for (const p of productos) {
+                    let claseFila = '';
+                    if (p.tipo === 'ARO' && p.stock < 5) {
+                        claseFila = ' class="table-warning"';
+                    }
+                    html += '<tr' + claseFila + '><td>' + escapar(p.nombre) + '</td><td>' + p.tipo + '</td>'
+                        + '<td>' + escapar(p.marca) + '</td><td>' + escapar(p.material) + '</td><td>' + escapar(p.forma) + '</td>'
+                        + '<td>' + dinero(p.precio) + '</td><td>' + p.stock + '</td>'
+                        + '<td><button class="btn btn-sm btn-warning" onclick="editar(' + p.id + ')">Editar</button> '
+                        + '<button class="btn btn-sm btn-danger" onclick="eliminar(' + p.id + ')">Eliminar</button></td></tr>';
+                }
+                if (productos.length === 0) {
+                    html = '<tr><td colspan="8">No hay productos.</td></tr>';
+                }
+                document.getElementById('filas').innerHTML = html;
+            } catch (error) {
+                mostrarMensaje('mensaje', error.message, 'danger');
+            }
+        }
+
+        function editar(id) {
+            const producto = productos.find(function (p) { return p.id === id; });
+            for (const campo of campos) {
+                document.getElementById(campo).value = producto[campo] === null ? '' : producto[campo];
+            }
+            document.getElementById('tituloFormulario').textContent = 'Editar producto';
+            window.scrollTo(0, 0);
+        }
+
+        function limpiar() {
+            document.getElementById('formProducto').reset();
+            document.getElementById('id').value = '';
+            document.getElementById('tituloFormulario').textContent = 'Nuevo producto';
+        }
+
+        async function eliminar(id) {
+            if (!confirm('¿Eliminar este producto?')) {
+                return;
+            }
+            try {
+                const datos = await pedir('api/productos?id=' + id, 'DELETE');
+                mostrarMensaje('mensaje', datos.mensaje, 'success');
+                cargarProductos();
+                cargarAlertas();
+            } catch (error) {
+                mostrarMensaje('mensaje', error.message, 'danger');
+            }
+        }
+
+        document.getElementById('formProducto').addEventListener('submit', async function (e) {
+            e.preventDefault();
+            const producto = {};
+            for (const campo of campos) {
+                producto[campo] = document.getElementById(campo).value;
+            }
+            const metodo = producto.id ? 'PUT' : 'POST';
+            try {
+                const datos = await pedir('api/productos', metodo, producto);
+                mostrarMensaje('mensaje', datos.mensaje, 'success');
+                limpiar();
+                cargarProductos();
+                cargarAlertas();
+            } catch (error) {
+                mostrarMensaje('mensaje', error.message, 'danger');
+            }
+        });
+
+        verificarSesion('VENDEDOR').then(function (sesion) {
+            if (sesion) {
+                cargarAlertas();
+                cargarProductos();
+            }
+        });
+    </script>
+</body>
+</html>

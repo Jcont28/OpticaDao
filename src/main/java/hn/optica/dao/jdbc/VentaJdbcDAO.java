@@ -1,27 +1,113 @@
 package hn.optica.dao.jdbc;
-import hn.optica.config.DB; 
-import hn.optica.dao.VentaDAO; 
-import java.sql.*;
+
+import hn.optica.config.DB;
+import hn.optica.dao.VentaDAO;
+import hn.optica.model.Venta;
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.sql.Statement;
+import java.util.ArrayList;
+import java.util.List;
+
 public class VentaJdbcDAO implements VentaDAO {
- public int registrar(int cliente,int medicion,int aro,int luna,int vendedor,int cantidad,double tasa)throws Exception{
-  try(Connection c=DB.get()){c.setAutoCommit(false);try{
-   validarProducto(c,aro,cantidad);validarProducto(c,luna,cantidad);
-   double subtotal=precio(c,aro)*cantidad+precio(c,luna)*cantidad, impuesto=subtotal*tasa, total=subtotal+impuesto;
-   try(PreparedStatement p=c.prepareStatement("INSERT Ventas(ClienteID,MedicionID,AroID,LunaID,VendedorID,Cantidad,Subtotal,Impuesto,Total) VALUES(?,?,?,?,?,?,?,?,?)",Statement.RETURN_GENERATED_KEYS)){
-    p.setInt(1,cliente);p.setInt(2,medicion);p.setInt(3,aro);p.setInt(4,luna);p.setInt(5,vendedor);p.setInt(6,cantidad);p.setDouble(7,subtotal);p.setDouble(8,impuesto);p.setDouble(9,total);p.executeUpdate();
-    try(ResultSet r=p.getGeneratedKeys()){r.next();
-    int id=r.getInt(1);
-     try(PreparedStatement u=c.prepareStatement("UPDATE Productos SET Stock=Stock-? WHERE ProductoID IN (?,?)")){u.setInt(1,cantidad);u.setInt(2,aro);u.setInt(3,luna);u.executeUpdate();}c.commit();return id;}
-   }
-  }catch(Exception e){c.rollback();throw e;}}
- }
- private void validarProducto(Connection c,int id,int qty)
-         throws Exception{try(PreparedStatement p=c.prepareStatement("SELECT Stock,Tipo FROM Productos WITH(UPDLOCK,HOLDLOCK) WHERE ProductoID=? AND Activo=1")){p.setInt(1,id);
-         try(ResultSet r=p.executeQuery()){
-             if(!r.next()||r.getInt(1)<qty)throw new SQLException("Producto inexistente o stock insuficiente: "+id);}}}
- private double precio(Connection c,int id)
-         throws Exception{
-     try(PreparedStatement p=c.prepareStatement("SELECT Precio FROM Productos WHERE ProductoID=?")){p.setInt(1,id);
-     try(ResultSet r=p.executeQuery()){r.next();
-     return r.getDouble(1);}}}
+
+    @Override
+    public int registrar(Venta v) throws SQLException {
+        String sqlVenta = "INSERT INTO Ventas (ClienteID, MedicionID, AroID, LunaID, VendedorID, Cantidad, "
+                + "PrecioAro, PrecioLuna, Subtotal, Impuesto, Total) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+        String sqlApartado = "UPDATE Apartados SET Estado = 'VENDIDO' WHERE ClienteID = ? AND AroID = ? AND Estado = 'PENDIENTE'";
+        Connection con = DB.getConexion();
+        try {
+            con.setAutoCommit(false);
+            descontarStock(con, v.getAroId(), v.getCantidad());
+            descontarStock(con, v.getLunaId(), v.getCantidad());
+            int ventaId;
+            try (PreparedStatement ps = con.prepareStatement(sqlVenta, Statement.RETURN_GENERATED_KEYS)) {
+                ps.setInt(1, v.getClienteId());
+                ps.setInt(2, v.getMedicionId());
+                ps.setInt(3, v.getAroId());
+                ps.setInt(4, v.getLunaId());
+                ps.setInt(5, v.getVendedorId());
+                ps.setInt(6, v.getCantidad());
+                ps.setDouble(7, v.getPrecioAro());
+                ps.setDouble(8, v.getPrecioLuna());
+                ps.setDouble(9, v.getSubtotal());
+                ps.setDouble(10, v.getImpuesto());
+                ps.setDouble(11, v.getTotal());
+                ps.executeUpdate();
+                try (ResultSet rs = ps.getGeneratedKeys()) {
+                    rs.next();
+                    ventaId = rs.getInt(1);
+                }
+            }
+            try (PreparedStatement ps = con.prepareStatement(sqlApartado)) {
+                ps.setInt(1, v.getClienteId());
+                ps.setInt(2, v.getAroId());
+                ps.executeUpdate();
+            }
+            con.commit();
+            return ventaId;
+        } catch (SQLException e) {
+            con.rollback();
+            throw e;
+        } finally {
+            con.close();
+        }
+    }
+
+    private void descontarStock(Connection con, int productoId, int cantidad) throws SQLException {
+        String sql = "UPDATE Productos SET Stock = Stock - ? WHERE ProductoID = ? AND Activo = 1 AND Stock >= ?";
+        try (PreparedStatement ps = con.prepareStatement(sql)) {
+            ps.setInt(1, cantidad);
+            ps.setInt(2, productoId);
+            ps.setInt(3, cantidad);
+            int filas = ps.executeUpdate();
+            if (filas == 0) {
+                throw new SQLException("Stock insuficiente para el producto con codigo " + productoId);
+            }
+        }
+    }
+
+    @Override
+    public List<Venta> listar() throws SQLException {
+        String sql = "SELECT v.VentaID, v.ClienteID, c.Nombre AS ClienteNombre, v.MedicionID, "
+                + "v.AroID, a.Nombre AS AroNombre, v.LunaID, l.Nombre AS LunaNombre, "
+                + "v.VendedorID, ve.Nombre AS VendedorNombre, v.Cantidad, v.PrecioAro, v.PrecioLuna, "
+                + "v.Subtotal, v.Impuesto, v.Total, CONVERT(VARCHAR(16), v.Fecha, 120) AS Fecha "
+                + "FROM Ventas v "
+                + "INNER JOIN Clientes c ON c.ClienteID = v.ClienteID "
+                + "INNER JOIN Productos a ON a.ProductoID = v.AroID "
+                + "INNER JOIN Productos l ON l.ProductoID = v.LunaID "
+                + "INNER JOIN Vendedores ve ON ve.VendedorID = v.VendedorID "
+                + "ORDER BY v.VentaID DESC";
+        List<Venta> lista = new ArrayList<>();
+        try (Connection con = DB.getConexion();
+                PreparedStatement ps = con.prepareStatement(sql);
+                ResultSet rs = ps.executeQuery()) {
+            while (rs.next()) {
+                Venta v = new Venta();
+                v.setId(rs.getInt("VentaID"));
+                v.setClienteId(rs.getInt("ClienteID"));
+                v.setClienteNombre(rs.getString("ClienteNombre"));
+                v.setMedicionId(rs.getInt("MedicionID"));
+                v.setAroId(rs.getInt("AroID"));
+                v.setAroNombre(rs.getString("AroNombre"));
+                v.setLunaId(rs.getInt("LunaID"));
+                v.setLunaNombre(rs.getString("LunaNombre"));
+                v.setVendedorId(rs.getInt("VendedorID"));
+                v.setVendedorNombre(rs.getString("VendedorNombre"));
+                v.setCantidad(rs.getInt("Cantidad"));
+                v.setPrecioAro(rs.getDouble("PrecioAro"));
+                v.setPrecioLuna(rs.getDouble("PrecioLuna"));
+                v.setSubtotal(rs.getDouble("Subtotal"));
+                v.setImpuesto(rs.getDouble("Impuesto"));
+                v.setTotal(rs.getDouble("Total"));
+                v.setFecha(rs.getString("Fecha"));
+                lista.add(v);
+            }
+        }
+        return lista;
+    }
 }

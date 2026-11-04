@@ -1,2 +1,12 @@
 package hn.optica.dao;
-public interface VentaDAO { int registrar(int cliente,int medicion,int aro,int luna,int vendedor,int cantidad,double impuesto) throws Exception; }
+
+import hn.optica.model.Venta;
+import java.sql.SQLException;
+import java.util.List;
+
+public interface VentaDAO {
+
+    int registrar(Venta venta) throws SQLException;
+
+    List<Venta> listar() throws SQLException;
+}

@@ -1,3 +1,76 @@
-<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Mis mediciones</title><link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/css/bootstrap.min.css" rel="stylesheet"></head><body><main class="container py-4"><h2>Historial de mediciones</h2><p>Consulta tus recetas oftalmológicas registradas.</p><table class="table table-striped"><thead><tr><th>Fecha</th><th>Ojo</th><th>Esfera</th><th>Cilindro</th><th>Eje</th><th>Adición</th><th>Observaciones</th></tr></thead><tbody id="rows"></tbody></table><a href="catalogo.html">Volver al catálogo</a></main><script>
-(async()=>{let r=await fetch('api/mediciones');let a=await r.json();rows.innerHTML=a.map(x=>`<tr><td>${String(x.Fecha).substring(0,10)}</td><td>${x.Ojo}</td><td>${x.Esfera}</td><td>${x.Cilindro}</td><td>${x.Eje}</td><td>${x.Adicion}</td><td>${x.Observaciones||''}</td></tr>`).join('')||'<tr><td colspan="7">No hay mediciones registradas.</td></tr>';})();
-</script></body></html>
+<!doctype html>
+<html lang="es">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Mis mediciones</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/css/bootstrap.min.css" rel="stylesheet">
+</head>
+<body>
+    <nav class="navbar navbar-expand navbar-dark bg-dark">
+        <div class="container">
+            <span class="navbar-brand">Óptica | Cliente</span>
+            <div class="navbar-nav">
+                <a class="nav-link" href="catalogo.html">Catálogo</a>
+                <a class="nav-link active" href="historial.html">Mis mediciones</a>
+            </div>
+            <div class="text-white">
+                <span id="nombreUsuario"></span>
+                <button class="btn btn-sm btn-outline-light ms-2" onclick="salir()">Salir</button>
+            </div>
+        </div>
+    </nav>
+    <main class="container py-4">
+        <h2>Historial de mediciones</h2>
+        <p>Consulta tus recetas oftalmológicas registradas.</p>
+        <div id="mensaje" class="d-none"></div>
+        <div class="table-responsive">
+            <table class="table table-striped table-bordered text-center">
+                <thead>
+                    <tr>
+                        <th rowspan="2">Fecha</th>
+                        <th colspan="3">Ojo derecho (OD)</th>
+                        <th colspan="3">Ojo izquierdo (OI)</th>
+                        <th rowspan="2">Adición</th>
+                        <th rowspan="2">DP</th>
+                        <th rowspan="2">Observaciones</th>
+                    </tr>
+                    <tr>
+                        <th>Esfera</th><th>Cilindro</th><th>Eje</th>
+                        <th>Esfera</th><th>Cilindro</th><th>Eje</th>
+                    </tr>
+                </thead>
+                <tbody id="filas"></tbody>
+            </table>
+        </div>
+    </main>
+    <script src="js/app.js"></script>
+    <script>
+        async function cargarMediciones() {
+            try {
+                const lista = await pedir('api/mediciones');
+                let html = '';
+                for (const m of lista) {
+                    html += '<tr><td>' + m.fecha + '</td>'
+                        + '<td>' + m.esferaOd + '</td><td>' + m.cilindroOd + '</td><td>' + m.ejeOd + '°</td>'
+                        + '<td>' + m.esferaOi + '</td><td>' + m.cilindroOi + '</td><td>' + m.ejeOi + '°</td>'
+                        + '<td>' + m.adicion + '</td><td>' + m.distanciaPupilar + '</td>'
+                        + '<td>' + escapar(m.observaciones) + '</td></tr>';
+                }
+                if (lista.length === 0) {
+                    html = '<tr><td colspan="10">No hay mediciones registradas.</td></tr>';
+                }
+                document.getElementById('filas').innerHTML = html;
+            } catch (error) {
+                mostrarMensaje('mensaje', error.message, 'danger');
+            }
+        }
+
+        verificarSesion('CLIENTE').then(function (sesion) {
+            if (sesion) {
+                cargarMediciones();
+            }
+        });
+    </script>
+</body>
+</html>

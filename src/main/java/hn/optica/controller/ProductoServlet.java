@@ -1,28 +1,92 @@
 package hn.optica.controller;
-import hn.optica.service.OpticaService;import hn.optica.model.Producto;import jakarta.servlet.annotation.WebServlet;import jakarta.servlet.http.*;import com.google.gson.JsonObject;import java.math.BigDecimal;import java.util.*;
-@WebServlet("/api/productos")
-public class ProductoServlet extends JsonServlet{
- private final OpticaService s=new OpticaService();
- protected void doGet(HttpServletRequest q,HttpServletResponse p)
-         throws java.io.IOException{
-     if(!cliente(q)&&!vendedor(q)){p.sendError(401);
-     return;}try{json(p,s.productos.listar(q.getParameter("tipo"),q.getParameter("marca"),q.getParameter("material"),q.getParameter("forma")));}
-     catch(Exception e){p.setStatus(500);json(p,Map.of("mensaje",e.getMessage()));}}
- protected void doPost(HttpServletRequest q,HttpServletResponse p)
-         throws java.io.IOException{if(!vendedor(q)){p.sendError(403);
-         return;}
-         try{Producto x=leer(body(q));s.productos.guardar(x);json(p,Map.of("mensaje","Producto guardado"));}
-         catch(Exception e){p.setStatus(400);json(p,Map.of("mensaje",e.getMessage()));}}
- protected void doPut(HttpServletRequest q,HttpServletResponse p)
-         throws java.io.IOException{if(!vendedor(q)){p.sendError(403);
-         return;}
-         try{JsonObject b=body(q);Producto x=leer(b);x.id=num(b,"id");s.productos.actualizar(x);json(p,Map.of("mensaje","Producto actualizado"));}
-         catch(Exception e){p.setStatus(400);json(p,Map.of("mensaje",e.getMessage()));}}
- protected void doDelete(HttpServletRequest q,HttpServletResponse p)
-         throws java.io.IOException{if(!vendedor(q)){p.sendError(403);
-         return;}
-         try{s.productos.desactivar(Integer.parseInt(q.getParameter("id")));json(p,Map.of("mensaje","Producto desactivado"));}
-         catch(Exception e){p.setStatus(400);json(p,Map.of("mensaje",e.getMessage()));}}
- private Producto leer(JsonObject b){Producto x=new Producto();x.nombre=str(b,"nombre");x.tipo=str(b,"tipo");x.marca=str(b,"marca");x.material=str(b,"material");x.forma=str(b,"forma");x.precio=new BigDecimal(b.get("precio").getAsString());x.stock=num(b,"stock");
- return x;}
+
+import com.google.gson.JsonObject;
+import hn.optica.model.Producto;
+import hn.optica.service.ProductoService;
+import jakarta.servlet.annotation.WebServlet;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
+import java.io.IOException;
+
+@WebServlet(urlPatterns = {"/api/productos", "/api/alertas"})
+public class ProductoServlet extends JsonServlet {
+
+    private ProductoService productoService = new ProductoService();
+
+    @Override
+    protected void doGet(HttpServletRequest req, HttpServletResponse resp) throws IOException {
+        if (!permitirVendedor(req, resp)) {
+            return;
+        }
+        try {
+            if (req.getServletPath().equals("/api/alertas")) {
+                enviarJson(resp, 200, productoService.arosConStockBajo());
+                return;
+            }
+            enviarJson(resp, 200, productoService.listar(
+                    parametro(req, "tipo"),
+                    parametro(req, "marca"),
+                    parametro(req, "material"),
+                    parametro(req, "forma"),
+                    parametroDecimal(req, "precioMin"),
+                    parametroDecimal(req, "precioMax")));
+        } catch (Exception e) {
+            enviarError(resp, e);
+        }
+    }
+
+    @Override
+    protected void doPost(HttpServletRequest req, HttpServletResponse resp) throws IOException {
+        if (!permitirVendedor(req, resp)) {
+            return;
+        }
+        try {
+            Producto p = leerProducto(leerJson(req));
+            productoService.guardar(p);
+            enviarMensaje(resp, 200, "Producto guardado");
+        } catch (Exception e) {
+            enviarError(resp, e);
+        }
+    }
+
+    @Override
+    protected void doPut(HttpServletRequest req, HttpServletResponse resp) throws IOException {
+        if (!permitirVendedor(req, resp)) {
+            return;
+        }
+        try {
+            JsonObject datos = leerJson(req);
+            Producto p = leerProducto(datos);
+            p.setId(entero(datos, "id"));
+            productoService.actualizar(p);
+            enviarMensaje(resp, 200, "Producto actualizado");
+        } catch (Exception e) {
+            enviarError(resp, e);
+        }
+    }
+
+    @Override
+    protected void doDelete(HttpServletRequest req, HttpServletResponse resp) throws IOException {
+        if (!permitirVendedor(req, resp)) {
+            return;
+        }
+        try {
+            productoService.eliminar(parametroEntero(req, "id"));
+            enviarMensaje(resp, 200, "Producto eliminado");
+        } catch (Exception e) {
+            enviarError(resp, e);
+        }
+    }
+
+    private Producto leerProducto(JsonObject datos) {
+        Producto p = new Producto();
+        p.setNombre(texto(datos, "nombre"));
+        p.setTipo(texto(datos, "tipo").toUpperCase());
+        p.setMarca(texto(datos, "marca"));
+        p.setMaterial(texto(datos, "material"));
+        p.setForma(texto(datos, "forma"));
+        p.setPrecio(decimal(datos, "precio"));
+        p.setStock(entero(datos, "stock"));
+        return p;
+    }
 }

@@ -1,42 +1,61 @@
-# Sistema de Óptica – Java + DAO (NetBeans)
+# Sistema de Óptica – Java + DAO
 
-Proyecto Maven WAR para abrir directamente en Apache NetBeans. Está planteado como aplicación web Java (Servlets/JDBC), conserva vistas HTML/Bootstrap y sustituye el servidor Node.js por controladores Java.
+Aplicación web en Java (Servlets + JDBC) para gestionar una óptica, usando el patrón DAO y SQL Server en Azure.
 
-## Requisitos
-- JDK 17 o superior
-- Apache NetBeans con soporte Maven
-- Apache Tomcat 10.1+ (Jakarta Servlet 6)
-- SQL Server (la configuración incluida apunta a `localhost:1433`)
+## Despliegue
 
-## Abrir y ejecutar
-1. Extrae el ZIP.
-2. En NetBeans: **File > Open Project** y selecciona la carpeta `OpticaDAO-NetBeans`.
-3. Configura Tomcat 10.1+ en **Tools > Servers**.
-4. Ejecuta `database/optica.sql` en SQL Server Management Studio.
-5. Configura las variables de entorno `OPTICA_DB_URL`, `OPTICA_DB_USER`, `OPTICA_DB_PASSWORD`. Ejemplo URL: `jdbc:sqlserver://localhost:1433;databaseName=OpticaDB;encrypt=true;trustServerCertificate=true`.
-6. Compila con **Clean and Build** y ejecuta sobre Tomcat.
-7. Abre `http://localhost:8080/OpticaDAO/`.
+| Parte | Plataforma | Enlace |
+|---|---|---|
+| Páginas web (HTML/JS) | Vercel | https://opticadao.vercel.app |
+| Backend Java (Tomcat) | Render (Docker, plan gratis) | https://opticadao.onrender.com |
+| Base de datos | Azure SQL (`progav2.database.windows.net`, base `optica`) | |
+| Código | GitHub | https://github.com/Jcont28/OpticaDao |
 
-## Usuario inicial
-Al desplegar, la aplicación crea un vendedor de demostración si no existe: `vendedor@optica.local` / `Admin123*` (se guarda con BCrypt); cámbiala inmediatamente en un entorno real.
+Vercel no ejecuta Java, por eso Vercel publica las páginas y reenvía todo lo que empieza con `/api/` al backend de Render (ver `vercel.json`). Render compila el proyecto con Maven y lo ejecuta en Tomcat 10.1 (ver `Dockerfile`).
 
-## Arquitectura
-- `model`: entidades del negocio.
-- `dao`: contratos DAO.
-- `dao.jdbc`: implementaciones JDBC.
-- `service`: reglas de negocio, validación y transacciones.
-- `controller`: Servlets HTTP que reciben peticiones y responden JSON.
-- `src/main/webapp`: HTML y JavaScript del navegador.
+## Usuarios de prueba
 
-## Funcionalidad incluida
-- Login y redirección por rol Cliente/Vendedor.
-- Registro de cliente.
-- Catálogo de aros con filtros y opción de apartado.
-- Historial de mediciones por cliente.
-- CRUD básico de inventario de aros, lunas y accesorios.
-- Alertas de stock menor a 5.
-- Registro de ventas con cliente, medición, aro y luna obligatorios; cálculo y descuento transaccional de stock.
-- Historial de ventas.
+| Rol | Usuario | Contraseña |
+|---|---|---|
+| Vendedor | vendedor@optica.local | Admin123* |
+| Cliente | cliente@optica.local | Cliente123* |
 
-## Notas
-El sistema usa SQL Server porque el proyecto original estaba conectado a SQL Server. Las páginas son HTML y el backend es Java; JavaScript solo consume los endpoints de los Servlets. No se incluye `node_modules`, `.git` ni código Node.js. Las contraseñas nuevas deben guardarse con BCrypt. El primer usuario demo se crea con BCrypt al iniciar la aplicación si no existe.
+## Estructura (patrón DAO)
+
+- `model`: Usuario, Cliente, Vendedor, Medicion, Producto, Aro, Apartado, Venta.
+- `dao`: interfaces UsuarioDAO, ClienteDAO, VendedorDAO, MedicionDAO, ProductoDAO, AroDAO, ApartadoDAO, VentaDAO.
+- `dao.jdbc`: implementaciones con JDBC.
+- `service`: reglas de negocio (login con BCrypt, validaciones, cálculo de subtotal, impuesto y total, alertas de stock).
+- `controller`: Servlets que reciben las peticiones y responden JSON.
+- `config`: conexión a la base de datos.
+- `src/main/webapp`: páginas HTML.
+
+## Funcionalidades
+
+- Login con redirección según el rol (Cliente o Vendedor).
+- Registro de clientes (nombre, DNI, teléfono, correo).
+- Cliente: historial de mediciones, catálogo de aros con filtros por marca, material, forma y precio, apartar aros.
+- Vendedor: CRUD de aros, lunas y accesorios, alerta de aros con menos de 5 unidades, registro de mediciones, registro de ventas con cliente, medición, aro y luna, cálculo automático de subtotal, ISV y total, descuento automático del stock e historial de ventas.
+
+## Base de datos
+
+1. Abrir SQL Server Management Studio conectado a `progav2.database.windows.net`.
+2. Seleccionar la base `optica`.
+3. Ejecutar `database/optica.sql` y después `database/datos_iniciales_ejemplo.sql`.
+
+## Ejecutar en NetBeans
+
+1. Copiar `src/main/resources/db.properties.example` como `db.properties` y poner usuario y contraseña.
+2. Configurar Tomcat 10.1 o superior con JDK 17.
+3. Clean and Build y Run.
+
+## Desplegar en Render
+
+1. En Render: New → Blueprint, elegir el repositorio. Render lee `render.yaml`.
+2. Llenar las variables:
+   - `OPTICA_DB_URL` = `jdbc:sqlserver://progav2.database.windows.net:1433;database=optica;encrypt=true;trustServerCertificate=false;hostNameInCertificate=*.database.windows.net;loginTimeout=30`
+   - `OPTICA_DB_USER` y `OPTICA_DB_PASSWORD`.
+3. En Azure, en el servidor `progav2` → Redes, permitir el acceso desde las IP de salida de Render.
+4. Si la URL de Render no es `https://opticadao.onrender.com`, cambiarla en `vercel.json`.
+
+El plan gratis de Render se apaga después de 15 minutos sin uso; la primera petición puede tardar cerca de un minuto.

@@ -1,6 +1,207 @@
-<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Ventas</title><link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/css/bootstrap.min.css" rel="stylesheet"></head><body><main class="container py-4" style="max-width:800px"><h2>Registrar venta</h2><form id="f" class="card card-body"><label>Cliente</label><select id="cliente" class="form-select mb-2" required></select><label>Medición del cliente</label><select id="medicion" class="form-select mb-2" required></select><label>Aro</label><select id="aro" class="form-select mb-2" required></select><label>Luna / cristal</label><select id="luna" class="form-select mb-2" required></select><label>Cantidad</label><input id="cantidad" class="form-control mb-2" type="number" min="1" value="1" required><label>Impuesto (porcentaje; 0 si no aplica)</label><input id="impuesto" class="form-control mb-3" type="number" min="0" step=".01" value="0"><button class="btn btn-primary">Procesar venta</button></form><p id="msg" class="mt-3"></p></main><script>
-const $=x=>document.getElementById(x);async function opciones(tipo,extra=''){let r=await fetch('api/opciones?tipo='+tipo+extra);return r.json()}async function llenar(id,a){$(id).innerHTML='<option value="">Seleccione</option>'+a.map(x=>`<option value="${x.id}">${x.nombre}</option>`).join('');}
-(async()=>{await llenar('cliente',await opciones('clientes'));let ps=await (await fetch('api/productos')).json();await llenar('aro',ps.filter(x=>x.tipo==='ARO').map(x=>({id:x.id,nombre:x.nombre+' (stock '+x.stock+')'})));await llenar('luna',ps.filter(x=>x.tipo==='LUNA').map(x=>({id:x.id,nombre:x.nombre+' (stock '+x.stock+')'})));})();
-$('cliente').onchange=async()=>llenar('medicion',await opciones('mediciones','&clienteId='+$('cliente').value));
-$('f').onsubmit=async e=>{e.preventDefault();let vend=await opciones('vendedor');if(!vend.length){msg.textContent='No hay vendedor asociado a esta sesión.';return;}let r=await fetch('api/ventas',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({clienteId:+cliente.value,medicionId:+medicion.value,aroId:+aro.value,lunaId:+luna.value,vendedorId:vend[0].id,cantidad:+cantidad.value,impuesto:+impuesto.value/100})});let d=await r.json();msg.textContent=d.mensaje;};
-</script></body></html>
+<!doctype html>
+<html lang="es">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Ventas</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/css/bootstrap.min.css" rel="stylesheet">
+</head>
+<body>
+    <nav class="navbar navbar-expand navbar-dark bg-dark">
+        <div class="container">
+            <span class="navbar-brand">Óptica | Vendedor</span>
+            <div class="navbar-nav">
+                <a class="nav-link" href="productos.html">Inventario</a>
+                <a class="nav-link" href="mediciones.html">Mediciones</a>
+                <a class="nav-link active" href="ventas.html">Ventas</a>
+            </div>
+            <div class="text-white">
+                <span id="nombreUsuario"></span>
+                <button class="btn btn-sm btn-outline-light ms-2" onclick="salir()">Salir</button>
+            </div>
+        </div>
+    </nav>
+    <main class="container py-4">
+        <h2>Registrar venta</h2>
+        <div id="mensaje" class="d-none"></div>
+        <div class="row">
+            <div class="col-md-7">
+                <form id="formVenta" class="card card-body">
+                    <label class="form-label" for="cliente">Cliente</label>
+                    <select id="cliente" class="form-select mb-2" required></select>
+                    <label class="form-label" for="medicion">Medición del cliente</label>
+                    <select id="medicion" class="form-select mb-2" required></select>
+                    <label class="form-label" for="aro">Aro</label>
+                    <select id="aro" class="form-select mb-2" required></select>
+                    <label class="form-label" for="luna">Luna / cristal</label>
+                    <select id="luna" class="form-select mb-2" required></select>
+                    <div class="row">
+                        <div class="col">
+                            <label class="form-label" for="cantidad">Cantidad</label>
+                            <input id="cantidad" class="form-control mb-3" type="number" min="1" value="1" required>
+                        </div>
+                        <div class="col">
+                            <label class="form-label" for="impuesto">Impuesto ISV (%)</label>
+                            <input id="impuesto" class="form-control mb-3" type="number" min="0" max="100" step="0.01" value="15">
+                        </div>
+                    </div>
+                    <button class="btn btn-primary">Procesar venta</button>
+                </form>
+            </div>
+            <div class="col-md-5">
+                <div class="card card-body">
+                    <h5>Resumen</h5>
+                    <p class="mb-1">Subtotal: <span id="subtotal">L. 0.00</span></p>
+                    <p class="mb-1">Impuesto: <span id="valorImpuesto">L. 0.00</span></p>
+                    <p class="fs-4 fw-bold">Total: <span id="total">L. 0.00</span></p>
+                </div>
+            </div>
+        </div>
+
+        <h3 class="mt-5">Aros apartados por clientes</h3>
+        <table class="table table-sm table-striped">
+            <thead><tr><th>Fecha</th><th>Cliente</th><th>Aro</th><th>Precio</th></tr></thead>
+            <tbody id="apartados"></tbody>
+        </table>
+
+        <h3 class="mt-4">Historial de ventas</h3>
+        <table class="table table-striped">
+            <thead>
+                <tr><th>#</th><th>Fecha</th><th>Cliente</th><th>Aro</th><th>Luna</th><th>Cant.</th><th>Subtotal</th><th>ISV</th><th>Total</th><th>Vendedor</th></tr>
+            </thead>
+            <tbody id="ventas"></tbody>
+        </table>
+    </main>
+    <script src="js/app.js"></script>
+    <script>
+        let productos = [];
+
+        function buscarPrecio(id) {
+            const producto = productos.find(function (p) { return String(p.id) === String(id); });
+            return producto ? producto.precio : 0;
+        }
+
+        function calcularTotales() {
+            const cantidad = Number(document.getElementById('cantidad').value) || 0;
+            const porcentaje = Number(document.getElementById('impuesto').value) || 0;
+            const precioAro = buscarPrecio(document.getElementById('aro').value);
+            const precioLuna = buscarPrecio(document.getElementById('luna').value);
+            const subtotal = (precioAro + precioLuna) * cantidad;
+            const impuesto = subtotal * porcentaje / 100;
+            document.getElementById('subtotal').textContent = dinero(subtotal);
+            document.getElementById('valorImpuesto').textContent = dinero(impuesto);
+            document.getElementById('total').textContent = dinero(subtotal + impuesto);
+        }
+
+        async function cargarDatos() {
+            try {
+                const clientes = await pedir('api/clientes');
+                llenarSelect('cliente', clientes, function (c) { return c.nombre + ' - ' + c.dni; });
+                llenarSelect('medicion', [], null);
+                productos = await pedir('api/productos');
+                const aros = productos.filter(function (p) { return p.tipo === 'ARO' && p.stock > 0; });
+                const lunas = productos.filter(function (p) { return p.tipo === 'LUNA' && p.stock > 0; });
+                const texto = function (p) { return p.nombre + ' - ' + dinero(p.precio) + ' (stock ' + p.stock + ')'; };
+                llenarSelect('aro', aros, texto);
+                llenarSelect('luna', lunas, texto);
+                calcularTotales();
+            } catch (error) {
+                mostrarMensaje('mensaje', error.message, 'danger');
+            }
+        }
+
+        async function cargarMediciones() {
+            const clienteId = document.getElementById('cliente').value;
+            if (!clienteId) {
+                llenarSelect('medicion', [], null);
+                return;
+            }
+            try {
+                const lista = await pedir('api/mediciones?clienteId=' + clienteId);
+                llenarSelect('medicion', lista, function (m) {
+                    return m.fecha + ' | OD ' + m.esferaOd + ' / ' + m.cilindroOd + ' x ' + m.ejeOd
+                        + ' | OI ' + m.esferaOi + ' / ' + m.cilindroOi + ' x ' + m.ejeOi;
+                });
+                if (lista.length === 0) {
+                    mostrarMensaje('mensaje', 'El cliente no tiene mediciones. Regístrela en la opción Mediciones.', 'warning');
+                }
+            } catch (error) {
+                mostrarMensaje('mensaje', error.message, 'danger');
+            }
+        }
+
+        async function cargarApartados() {
+            try {
+                const lista = await pedir('api/apartados');
+                let html = '';
+                for (const a of lista) {
+                    html += '<tr><td>' + a.fecha + '</td><td>' + escapar(a.clienteNombre) + '</td><td>' + escapar(a.aroNombre)
+                        + '</td><td>' + dinero(a.precio) + '</td></tr>';
+                }
+                if (lista.length === 0) {
+                    html = '<tr><td colspan="4">No hay apartados pendientes.</td></tr>';
+                }
+                document.getElementById('apartados').innerHTML = html;
+            } catch (error) {
+                mostrarMensaje('mensaje', error.message, 'danger');
+            }
+        }
+
+        async function cargarVentas() {
+            try {
+                const lista = await pedir('api/ventas');
+                let html = '';
+                for (const v of lista) {
+                    html += '<tr><td>' + v.id + '</td><td>' + v.fecha + '</td><td>' + escapar(v.clienteNombre) + '</td>'
+                        + '<td>' + escapar(v.aroNombre) + '</td><td>' + escapar(v.lunaNombre) + '</td><td>' + v.cantidad + '</td>'
+                        + '<td>' + dinero(v.subtotal) + '</td><td>' + dinero(v.impuesto) + '</td><td>' + dinero(v.total) + '</td>'
+                        + '<td>' + escapar(v.vendedorNombre) + '</td></tr>';
+                }
+                if (lista.length === 0) {
+                    html = '<tr><td colspan="10">Aún no hay ventas.</td></tr>';
+                }
+                document.getElementById('ventas').innerHTML = html;
+            } catch (error) {
+                mostrarMensaje('mensaje', error.message, 'danger');
+            }
+        }
+
+        document.getElementById('cliente').addEventListener('change', cargarMediciones);
+        for (const id of ['aro', 'luna', 'cantidad', 'impuesto']) {
+            document.getElementById(id).addEventListener('input', calcularTotales);
+            document.getElementById(id).addEventListener('change', calcularTotales);
+        }
+
+        document.getElementById('formVenta').addEventListener('submit', async function (e) {
+            e.preventDefault();
+            const venta = {
+                clienteId: document.getElementById('cliente').value,
+                medicionId: document.getElementById('medicion').value,
+                aroId: document.getElementById('aro').value,
+                lunaId: document.getElementById('luna').value,
+                cantidad: document.getElementById('cantidad').value,
+                impuesto: document.getElementById('impuesto').value
+            };
+            try {
+                const v = await pedir('api/ventas', 'POST', venta);
+                mostrarMensaje('mensaje', 'Venta #' + v.id + ' registrada. Subtotal ' + dinero(v.subtotal)
+                    + ', impuesto ' + dinero(v.impuesto) + ', total ' + dinero(v.total) + '.', 'success');
+                document.getElementById('formVenta').reset();
+                await cargarDatos();
+                cargarApartados();
+                cargarVentas();
+            } catch (error) {
+                mostrarMensaje('mensaje', error.message, 'danger');
+            }
+        });
+
+        verificarSesion('VENDEDOR').then(function (sesion) {
+            if (sesion) {
+                cargarDatos();
+                cargarApartados();
+                cargarVentas();
+            }
+        });
+    </script>
+</body>
+</html>

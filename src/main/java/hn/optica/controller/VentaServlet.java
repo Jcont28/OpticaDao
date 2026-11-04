@@ -1,12 +1,52 @@
 package hn.optica.controller;
-import hn.optica.service.OpticaService;import jakarta.servlet.annotation.WebServlet;import jakarta.servlet.http.*;import java.util.*;
+
+import com.google.gson.JsonObject;
+import hn.optica.model.Vendedor;
+import hn.optica.model.Venta;
+import hn.optica.service.UsuarioService;
+import hn.optica.service.VentaService;
+import jakarta.servlet.annotation.WebServlet;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
+import java.io.IOException;
+
 @WebServlet("/api/ventas")
-public class VentaServlet extends JsonServlet{
- private final OpticaService s=new OpticaService();
- @Override
- protected void doPost(HttpServletRequest q,HttpServletResponse p)
-         throws java.io.IOException{if(!vendedor(q)){p.sendError(403);
-         return;}
-         try{var b=body(q);int id=s.ventas.registrar(num(b,"clienteId"),num(b,"medicionId"),num(b,"aroId"),num(b,"lunaId"),num(b,"vendedorId"),num(b,"cantidad"),b.has("impuesto")?b.get("impuesto").getAsDouble():0);json(p,Map.of("mensaje","Venta registrada correctamente","ventaId",id));}
-         catch(Exception e){p.setStatus(400);json(p,Map.of("mensaje",e.getMessage()));}}
+public class VentaServlet extends JsonServlet {
+
+    private VentaService ventaService = new VentaService();
+    private UsuarioService usuarioService = new UsuarioService();
+
+    @Override
+    protected void doGet(HttpServletRequest req, HttpServletResponse resp) throws IOException {
+        if (!permitirVendedor(req, resp)) {
+            return;
+        }
+        try {
+            enviarJson(resp, 200, ventaService.listar());
+        } catch (Exception e) {
+            enviarError(resp, e);
+        }
+    }
+
+    @Override
+    protected void doPost(HttpServletRequest req, HttpServletResponse resp) throws IOException {
+        if (!permitirVendedor(req, resp)) {
+            return;
+        }
+        try {
+            JsonObject datos = leerJson(req);
+            Vendedor vendedor = usuarioService.buscarVendedorPorUsuario(usuarioSesion(req).getId());
+            Venta venta = ventaService.registrar(
+                    entero(datos, "clienteId"),
+                    entero(datos, "medicionId"),
+                    entero(datos, "aroId"),
+                    entero(datos, "lunaId"),
+                    vendedor.getId(),
+                    entero(datos, "cantidad"),
+                    decimal(datos, "impuesto"));
+            enviarJson(resp, 200, venta);
+        } catch (Exception e) {
+            enviarError(resp, e);
+        }
+    }
 }
