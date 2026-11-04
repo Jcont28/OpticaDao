@@ -19,11 +19,11 @@ public class DB {
         if (url != null) {
             return;
         }
-        String urlEntorno = System.getenv("jdbc:sqlserver://localhost:1433;databaseName=Optica;encrypt=true;trustServerCertificate=true");
+        String urlEntorno = System.getenv("DB_URL");
         if (urlEntorno != null && !urlEntorno.isEmpty()) {
             url = urlEntorno;
-            usuario = System.getenv("Jonacont");
-            password = System.getenv("Jc282828");
+            usuario = System.getenv("DB_USER");
+            password = System.getenv("DB_PASSWORD");
             return;
         }
         Properties datos = new Properties();
